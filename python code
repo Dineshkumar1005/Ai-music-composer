@@ -1,0 +1,47 @@
+import csv
+from transformers import MusicgenForConditionalGeneration, AutoProcessor
+import torch
+from IPython.display import Audio
+
+# Function to load emoji descriptions from CSV into a dictionary
+def load_emoji_descriptions(csv_file_path):
+    emoji_to_description = {}
+    with open(csv_file_path, mode='r', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            emoji_to_description[row['Emoji(s)']] = row['Description']
+    return emoji_to_description
+
+# Define the model and processor
+model_name = "facebook/musicgen-small"
+model = MusicgenForConditionalGeneration.from_pretrained(model_name)
+processor = AutoProcessor.from_pretrained(model_name)
+
+# Set the device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# Load the emoji to description mappings from the CSV
+csv_file_path = "/content/emoji_music_descriptions.csv"
+emoji_to_description = load_emoji_descriptions(csv_file_path)
+
+# Function to generate music based on input
+def generate_music(input_text, emoji_to_description):
+    description = emoji_to_description.get(input_text, input_text)
+    print(f"Generating music for: {description}")
+    inputs = processor(text=[description], return_tensors="pt", padding=True).to(device)
+    audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=1000).cpu().numpy()[0]
+    return audio_values
+# Function to play audio
+def play_audio(audio_values):
+    sampling_rate = model.config.audio_encoder.sampling_rate
+    return Audio(audio_values, rate=sampling_rate)
+
+# input and music generation
+prompt = input("Enter your emoji or text: ")  # Get input from the user
+if prompt.lower() != 'exit':
+    audio_values = generate_music(prompt, emoji_to_description)
+    audio_player = play_audio(audio_values)
+    display(audio_player)
+else:
+    print("Exiting...")
